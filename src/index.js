@@ -1,38 +1,75 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { createStore, applyMiddleware } from 'redux';
+import { createStore, applyMiddleware, combineReducers } from 'redux';
 import { Provider } from 'react-redux';
 import createSagaMiddleware from 'redux-saga';
+import { call, put, takeEvery } from 'redux-saga/effects';
 import logger from 'redux-logger';
-
-import rootReducer from './redux/reducers'; // imports ./redux/reducers/index.js
-import rootSaga from './redux/sagas'; // imports ./redux/sagas/index.js
+import axios from 'axios';
 
 import App from './components/App/App';
 
 const sagaMiddleware = createSagaMiddleware();
 
-// this line creates an array of all of redux middleware you want to use
-// we don't want a whole ton of console logs in our production code
-// logger will only be added to your project if your in development mode
-const middlewareList = process.env.NODE_ENV === 'development' ?
-  [sagaMiddleware, logger] :
-  [sagaMiddleware];
+//search result reducer
+const searchResults = (state = [], action) =>{
+  if (action.type === 'SET_RESULTS') {
+      return action.payload;
+  }
+  return state;
+}
 
-const store = createStore(
-  // tells the saga middleware to use the rootReducer
-  // rootSaga contains all of our other reducers
-  rootReducer,
-  // adds all middleware to our project including saga and logger
-  applyMiddleware(...middlewareList),
+//favorites reducer
+const saved = (state = [], action) =>{
+  if (action.type === 'SET_FAVORITES') {
+      return action.payload;
+  }
+  return state;
+}
+
+const storeInstance = createStore(
+  combineReducers({
+      searchResults,
+      saved
+  }),
+  applyMiddleware(
+      sagaMiddleware, 
+      logger
+  ),
 );
+
+function* searchMovies(action) {
+  try {
+    const response = yield call( axios.post, '/api/tmdb', action.payload);
+    yield put( {type: 'SET_RESULTS', payload: response.data} );
+  }
+  catch (error) {
+    console.log('error with giphy search', error);
+  }
+}
+
+function* saveMovie(action) {
+  try {
+    yield call( axios.post, '/api/database', action.payload);
+    //yield put( {type: 'SET_RESULTS', payload: response.data} );
+  }
+  catch (error) {
+    console.log('error with giphy search', error);
+  }
+}
+
+function* rootSaga() {
+  // yield takeEvery( 'GET_FAVORITES', fetchFavorities );
+  yield takeEvery( 'SEND_SAVE', saveMovie );
+  yield takeEvery( 'SEARCH_MOVIES',  searchMovies);
+}
 
 // tells the saga middleware to use the rootSaga
 // rootSaga contains all of our other sagas
 sagaMiddleware.run(rootSaga);
 
 ReactDOM.render(
-  <Provider store={store}>
+  <Provider store={storeInstance}>
     <App />
   </Provider>,
   document.getElementById('react-root'),
